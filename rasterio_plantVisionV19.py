@@ -53,7 +53,65 @@ def create_geojson_from_polygons(polygons, output_path, crs="EPSG:4326"):
     gdf.to_file(output_path, driver="GeoJSON")
 
 def annotate_image(image_path, output_geojson_path):
-    # ...[This function remains the same]...
+    with rasterio.open(image_path) as src:
+        # Calculate width and height of the quarter section
+        width = src.width // 2
+        height = src.height // 2
+
+        # Read the lower-left quarter, handling different channel counts
+        window = Window(0, src.height - height, width, height)
+        if src.count == 1:
+            img_data = src.read(1, window=window)  # Read single band
+            img_data = np.expand_dims(img_data, axis=2)  # Add channel dimension
+        else:
+            img_data = src.read([1, 2, 3], window=window)
+            img_data = np.moveaxis(img_data, 0, -1)
+
+        # Convert to 8-bit for OpenCV compatibility
+        img_data = (img_data * 255.0 / img_data.max()).astype(np.uint8)
+
+        # Create a compatible OpenCV image (ensure contiguous data)
+        img = cv2.cvtColor(img_data, cv2.COLOR_RGB2BGR)
+
+    if img is None:
+        raise ValueError(f"Could not load image: {image_path}")
+
+    print(f"Annotating: {image_path} (Lower-left quarter)")
+
+    cv2.namedWindow("Image Annotation", cv2.WINDOW_NORMAL)
+    polygons = []
+    current_polygon = []
+
+    def on_mouse(event, x, y, flags, param):
+        nonlocal current_polygon, polygons
+        if event == cv2.EVENT_LBUTTONDOWN:
+            # Adjust coordinates to full image scale
+            current_polygon.append([x + width, y + height])
+        elif event == cv2.EVENT_RBUTTONDOWN:
+            if len(current_polygon) > 2:
+                polygons.append(current_polygon.copy())
+                current_polygon = []
+                # Adjust coordinates for drawing on the quarter image
+                cv2.polylines(img, [np.array([[pt[0] - width, pt[1] - height] for pt in polygons[-1]], np.int32)],
+                              True, (0, 255, 0), 2)
+                cv2.imshow("Image Annotation", img)
+
+    cv2.setMouseCallback("Image Annotation", on_mouse)
+
+    print("Instructions:")
+    print("- Left-click to add points to the polygon.")
+    print("- Right-click to complete the current polygon.")
+    print("- Press 'q' to finish annotation and save the GeoJSON.")
+
+    while True:
+        cv2.imshow("Image Annotation", img)
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord("q"):
+            break
+
+    cv2.destroyAllWindows()
+    create_geojson_from_polygons(polygons, output_geojson_path)
+
 
 # --- Data Loading and Preprocessing ---
 def load_data(images_dir, labels_path, patch_size=PATCH_SIZE, use_pretrained=USE_PRETRAINED):
