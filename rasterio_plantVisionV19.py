@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 """
-Created on Sun Aug 25 14:44:11 2024
-
 @author: public work
 """
 import os
@@ -166,7 +164,7 @@ def visualize_predictions(image, predictions, threshold=0.5): # Adjust threshold
     return output_image
 
 # --- Function to save predicted ROIs as GeoJSON ---
-def save_predicted_rois(predictions, image_path, output_geojson_path, threshold=0.5):
+def save_predicted_rois(predictions, image_path, output_geojson_path, threshold=0.1):
     with rasterio.open(image_path) as src:
         transform = src.transform
     predicted_polygons = []
@@ -244,7 +242,7 @@ if __name__ == "__main__":
     param_grid = {
         'patch_size': [(16, 16), (32, 32)],
         'batch_size': [1, 2],
-        'epochs': [5, 10],
+        'epochs': [2, 4],
     }
 
     best_accuracy = 0.0
